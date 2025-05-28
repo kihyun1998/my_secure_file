@@ -1,151 +1,66 @@
 import 'dart:convert';
 import 'dart:io';
 
-class ImprovedEncryption {
-  // 다중 라운드를 위한 서로 다른 키들
-  static const List<List<int>> _transpositionKeys = [
-    [3, 1, 4, 0, 2, 6, 5, 7], // 라운드 1
-    [5, 2, 7, 1, 4, 0, 6, 3], // 라운드 2
-    [1, 6, 3, 5, 0, 7, 2, 4], // 라운드 3
-  ];
-
-  // 치환 테이블 (문자 자체를 바꿈)
-  static const String _substitutionTable =
-      'zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA9876543210!@#\$%^&*()_+-=[]{}|;:,.<>?';
-  static const String _originalTable =
-      'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#\$%^&*()_+-=[]{}|;:,.<>?';
-
+class SimpleFileEncryption {
+  // 전치 암호화를 위한 고정 키 패턴 (자리 재배치 순서)
+  static const List<int> _transpositionKey = [3, 1, 4, 0, 2, 6, 5, 7];
   static const int _blockSize = 8;
-  static const int _rounds = 3;
 
-  /// 개선된 암호화 - 치환 + 다중 라운드 전치 + XOR
-  static String _improvedEncrypt(String plainText) {
+  /// 텍스트를 전치 암호화로 암호화
+  static String _encryptText(String plainText) {
     if (plainText.isEmpty) return '';
 
-    String text = plainText;
+    String paddedText = _addPadding(plainText);
+    StringBuffer encrypted = StringBuffer();
 
-    // 1단계: 치환 암호화 (문자 자체를 바꿈)
-    text = _substituteText(text);
-
-    // 2단계: 패딩 추가
-    text = _addPadding(text);
-
-    // 3단계: 다중 라운드 전치 암호화
-    for (int round = 0; round < _rounds; round++) {
-      text = _multiRoundTransposition(text, round);
+    for (int i = 0; i < paddedText.length; i += _blockSize) {
+      String block = paddedText.substring(
+          i,
+          i + _blockSize > paddedText.length
+              ? paddedText.length
+              : i + _blockSize);
+      encrypted.write(_encryptBlock(block));
     }
 
-    // 4단계: XOR 변환 (라운드별로 다른 키)
-    text = _multiXorTransform(text);
-
-    return text;
+    return encrypted.toString();
   }
 
-  /// 개선된 복호화
-  static String _improvedDecrypt(String encryptedText) {
+  /// 전치 암호화로 암호화된 텍스트를 복호화
+  static String _decryptText(String encryptedText) {
     if (encryptedText.isEmpty) return '';
 
-    String text = encryptedText;
+    StringBuffer decrypted = StringBuffer();
 
-    // 역순으로 복원
-    // 4단계: XOR 복원
-    text = _multiXorRestore(text);
-
-    // 3단계: 다중 라운드 전치 복원 (역순)
-    for (int round = _rounds - 1; round >= 0; round--) {
-      text = _multiRoundTranspositionReverse(text, round);
+    for (int i = 0; i < encryptedText.length; i += _blockSize) {
+      String block = encryptedText.substring(
+          i,
+          i + _blockSize > encryptedText.length
+              ? encryptedText.length
+              : i + _blockSize);
+      decrypted.write(_decryptBlock(block));
     }
 
-    // 2단계: 패딩 제거
-    text = _removePadding(text);
-
-    // 1단계: 치환 복원
-    text = _restoreSubstitution(text);
-
-    return text;
+    return _removePadding(decrypted.toString());
   }
 
-  /// 치환 암호화 (각 문자를 다른 문자로 바꿈)
-  static String _substituteText(String text) {
-    StringBuffer result = StringBuffer();
-
-    for (int i = 0; i < text.length; i++) {
-      String char = text[i];
-      int index = _originalTable.indexOf(char);
-
-      if (index != -1) {
-        result.write(_substitutionTable[index]);
-      } else {
-        result.write(char); // 테이블에 없으면 그대로
-      }
-    }
-
-    return result.toString();
-  }
-
-  /// 치환 복원
-  static String _restoreSubstitution(String text) {
-    StringBuffer result = StringBuffer();
-
-    for (int i = 0; i < text.length; i++) {
-      String char = text[i];
-      int index = _substitutionTable.indexOf(char);
-
-      if (index != -1) {
-        result.write(_originalTable[index]);
-      } else {
-        result.write(char);
-      }
-    }
-
-    return result.toString();
-  }
-
-  /// 다중 라운드 전치 암호화
-  static String _multiRoundTransposition(String text, int round) {
-    StringBuffer result = StringBuffer();
-    List<int> key = _transpositionKeys[round % _transpositionKeys.length];
-
-    for (int i = 0; i < text.length; i += _blockSize) {
-      String block = text.substring(
-          i, i + _blockSize > text.length ? text.length : i + _blockSize);
-      result.write(_transpositionBlock(block, key));
-    }
-
-    return result.toString();
-  }
-
-  /// 다중 라운드 전치 복원
-  static String _multiRoundTranspositionReverse(String text, int round) {
-    StringBuffer result = StringBuffer();
-    List<int> key = _transpositionKeys[round % _transpositionKeys.length];
-
-    for (int i = 0; i < text.length; i += _blockSize) {
-      String block = text.substring(
-          i, i + _blockSize > text.length ? text.length : i + _blockSize);
-      result.write(_transpositionBlockReverse(block, key));
-    }
-
-    return result.toString();
-  }
-
-  /// 블록 전치
-  static String _transpositionBlock(String block, List<int> key) {
+  /// 블록 단위 암호화 (자리 재배치)
+  static String _encryptBlock(String block) {
     List<String> chars = List.filled(_blockSize, '\x00');
 
     for (int i = 0; i < block.length && i < _blockSize; i++) {
-      chars[key[i]] = block[i];
+      chars[_transpositionKey[i]] = block[i];
     }
 
     return chars.join();
   }
 
-  /// 블록 전치 복원
-  static String _transpositionBlockReverse(String block, List<int> key) {
+  /// 블록 단위 복호화 (자리 재배치 복원)
+  static String _decryptBlock(String block) {
     List<String> chars = List.filled(_blockSize, '\x00');
 
+    // 암호화의 역과정
     for (int i = 0; i < block.length && i < _blockSize; i++) {
-      int originalPos = key.indexOf(i);
+      int originalPos = _transpositionKey.indexOf(i);
       if (originalPos != -1) {
         chars[originalPos] = block[i];
       }
@@ -154,27 +69,7 @@ class ImprovedEncryption {
     return chars.join();
   }
 
-  /// 다중 XOR 변환 (각 문자마다 다른 키)
-  static String _multiXorTransform(String input) {
-    StringBuffer result = StringBuffer();
-    List<int> xorKeys = [42, 17, 89, 156, 73, 201, 38, 124]; // 8개 키
-
-    for (int i = 0; i < input.length; i++) {
-      int charCode = input.codeUnitAt(i);
-      int keyIndex = i % xorKeys.length;
-      int transformed = charCode ^ xorKeys[keyIndex];
-      result.writeCharCode(transformed);
-    }
-
-    return result.toString();
-  }
-
-  /// 다중 XOR 복원
-  static String _multiXorRestore(String input) {
-    return _multiXorTransform(input); // XOR는 자기 역함수
-  }
-
-  /// 패딩 추가
+  /// 패딩 추가 (PKCS7 스타일)
   static String _addPadding(String text) {
     int padding = _blockSize - (text.length % _blockSize);
     if (padding == 0) padding = _blockSize;
@@ -195,52 +90,109 @@ class ImprovedEncryption {
     return text;
   }
 
-  /// 파일에 암호화하여 저장
-  static Future<void> writeEncryptedFile(String filePath, String data) async {
-    String encrypted = _improvedEncrypt(data);
-    String base64Encoded = base64.encode(utf8.encode(encrypted));
+  /// 간단한 문자 치환을 위한 문자열 변환 (스크램블링 대신)
+  static String _simpleTransform(String input) {
+    StringBuffer result = StringBuffer();
 
+    for (int i = 0; i < input.length; i++) {
+      int charCode = input.codeUnitAt(i);
+      // 간단한 XOR 변환 (키: 42)
+      int transformed = charCode ^ 42;
+      result.writeCharCode(transformed);
+    }
+
+    return result.toString();
+  }
+
+  /// 간단한 문자 치환 복원 (XOR는 자기 자신이 역함수)
+  static String _simpleRestore(String input) {
+    return _simpleTransform(input); // XOR는 동일한 연산으로 복원
+  }
+
+  /// 파일에 암호화된 데이터 쓰기
+  static Future<void> writeEncryptedFile(String filePath, String data) async {
+    // 1. 전치 암호화
+    String encrypted = _encryptText(data);
+
+    // 2. 간단한 문자 변환
+    String transformed = _simpleTransform(encrypted);
+
+    // 3. Base64 인코딩
+    String base64Encoded = base64.encode(utf8.encode(transformed));
+
+    // 4. 파일에 쓰기
     File file = File(filePath);
     await file.writeAsString(base64Encoded);
   }
 
-  /// 파일에서 복호화하여 읽기
+  /// 파일에서 암호화된 데이터 읽고 복호화
   static Future<String> readEncryptedFile(String filePath) async {
+    // 1. 파일에서 읽기
     File file = File(filePath);
     if (!await file.exists()) {
       throw FileSystemException('파일이 존재하지 않습니다', filePath);
     }
 
     String base64Data = await file.readAsString();
-    String encrypted = utf8.decode(base64.decode(base64Data));
-    return _improvedDecrypt(encrypted);
+
+    // 2. Base64 디코딩
+    String transformed = utf8.decode(base64.decode(base64Data));
+
+    // 3. 문자 변환 복원
+    String encrypted = _simpleRestore(transformed);
+
+    // 4. 전치 복호화
+    return _decryptText(encrypted);
   }
 
-  /// 디버깅용 테스트
+  /// 디버깅용 - 단계별 테스트
   static void debugTest(String input) {
-    print('=== 개선된 암호화 테스트 ===');
+    print('=== 디버깅 테스트 ===');
     print('원본: "$input"');
 
-    String encrypted = _improvedEncrypt(input);
+    // 1단계: 전치 암호화
+    String encrypted = _encryptText(input);
+    print('1. 전치 암호화: "${encrypted.replaceAll('\x00', '\\0')}"');
+
+    // 2단계: 간단한 문자 변환
+    String transformed = _simpleTransform(encrypted);
     print(
-        '암호화: "${encrypted.replaceAll('\x00', '\\0').replaceAll('\n', '\\n')}"');
+        '2. 문자 변환: "${transformed.replaceAll('\x00', '\\0').replaceAll('\n', '\\n').replaceAll('\r', '\\r')}"');
 
-    String decrypted = _improvedDecrypt(encrypted);
-    print('복호화: "$decrypted"');
+    // 3단계: Base64
+    String base64Encoded = base64.encode(utf8.encode(transformed));
+    print('3. Base64: "$base64Encoded"');
 
-    print('성공: ${input == decrypted}');
-    print('================================\n');
+    print('\n=== 복호화 과정 ===');
+
+    // 역과정 1: Base64 디코딩
+    String decodedTransformed = utf8.decode(base64.decode(base64Encoded));
+    print(
+        '1. Base64 디코딩: "${decodedTransformed.replaceAll('\x00', '\\0').replaceAll('\n', '\\n').replaceAll('\r', '\\r')}"');
+
+    // 역과정 2: 문자 변환 복원
+    String restoredEncrypted = _simpleRestore(decodedTransformed);
+    print('2. 문자 변환 복원: "${restoredEncrypted.replaceAll('\x00', '\\0')}"');
+
+    // 역과정 3: 전치 복호화
+    String finalResult = _decryptText(restoredEncrypted);
+    print('3. 전치 복호화: "$finalResult"');
+
+    print('\n원본과 일치: ${input == finalResult}');
+    print('========================\n');
   }
 
-  /// 문자열 직접 암호화
+  /// 문자열 직접 암호화 (파일 저장 없이)
   static String encryptString(String plainText) {
-    String encrypted = _improvedEncrypt(plainText);
-    return base64.encode(utf8.encode(encrypted));
+    String encrypted = _encryptText(plainText);
+    String transformed = _simpleTransform(encrypted);
+    return base64.encode(utf8.encode(transformed));
   }
 
-  /// 문자열 직접 복호화
+  /// 암호화된 문자열 직접 복호화
   static String decryptString(String encryptedBase64) {
-    String encrypted = utf8.decode(base64.decode(encryptedBase64));
-    return _improvedDecrypt(encrypted);
+    String transformed = utf8.decode(base64.decode(encryptedBase64));
+    String encrypted = _simpleRestore(transformed);
+    return _decryptText(encrypted);
   }
 }
