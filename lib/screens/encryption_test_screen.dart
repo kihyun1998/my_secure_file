@@ -71,7 +71,7 @@ class _EncryptionTestScreenState extends State<EncryptionTestScreen> {
       String filePath =
           path.join(_selectedDirectory!, _fileNameController.text.trim());
 
-      await SimpleFileEncryption.writeEncryptedFile(
+      await ImprovedEncryption.writeEncryptedFile(
           filePath, _textController.text);
 
       setState(() {
@@ -114,7 +114,7 @@ class _EncryptionTestScreenState extends State<EncryptionTestScreen> {
           path.join(_selectedDirectory!, _fileNameController.text.trim());
 
       String decryptedData =
-          await SimpleFileEncryption.readEncryptedFile(filePath);
+          await ImprovedEncryption.readEncryptedFile(filePath);
 
       setState(() {
         _textController.text = decryptedData;
@@ -149,11 +149,11 @@ class _EncryptionTestScreenState extends State<EncryptionTestScreen> {
       String testInput = "Hello World!";
 
       // 디버그 정보를 콘솔에 출력
-      SimpleFileEncryption.debugTest(testInput);
+      ImprovedEncryption.debugTest(testInput);
 
       // 직접 암호화/복호화 테스트
-      String encrypted = SimpleFileEncryption.encryptString(testInput);
-      String decrypted = SimpleFileEncryption.decryptString(encrypted);
+      String encrypted = ImprovedEncryption.encryptString(testInput);
+      String decrypted = ImprovedEncryption.decryptString(encrypted);
 
       setState(() {
         _statusMessage = '''✅ 간단한 테스트 완료!
