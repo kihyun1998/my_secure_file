@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 class SimpleFileEncryption {
   // 전치 암호화를 위한 고정 키 패턴 (자리 재배치 순서)
@@ -59,8 +58,12 @@ class SimpleFileEncryption {
   static String _decryptBlock(String block) {
     List<String> chars = List.filled(_blockSize, '\x00');
 
+    // 암호화의 역과정
     for (int i = 0; i < block.length && i < _blockSize; i++) {
-      chars[i] = block[_transpositionKey[i]];
+      int originalPos = _transpositionKey.indexOf(i);
+      if (originalPos != -1) {
+        chars[originalPos] = block[i];
+      }
     }
 
     return chars.join();
@@ -87,40 +90,23 @@ class SimpleFileEncryption {
     return text;
   }
 
-  /// 추가 난독화를 위한 문자열 뒤섞기
-  static String _scrambleString(String input) {
-    List<String> chars = input.split('');
-    Random random = Random(42); // 고정 시드로 일관성 보장
+  /// 간단한 문자 치환을 위한 문자열 변환 (스크램블링 대신)
+  static String _simpleTransform(String input) {
+    StringBuffer result = StringBuffer();
 
-    for (int i = chars.length - 1; i > 0; i--) {
-      int j = random.nextInt(i + 1);
-      String temp = chars[i];
-      chars[i] = chars[j];
-      chars[j] = temp;
+    for (int i = 0; i < input.length; i++) {
+      int charCode = input.codeUnitAt(i);
+      // 간단한 XOR 변환 (키: 42)
+      int transformed = charCode ^ 42;
+      result.writeCharCode(transformed);
     }
 
-    return chars.join();
+    return result.toString();
   }
 
-  /// 뒤섞인 문자열 복원
-  static String _unscrambleString(String input) {
-    List<String> chars = input.split('');
-    List<int> indices = [];
-    Random random = Random(42); // 동일한 시드 사용
-
-    for (int i = chars.length - 1; i > 0; i--) {
-      indices.add(random.nextInt(i + 1));
-    }
-
-    for (int i = 0; i < indices.length; i++) {
-      int originalI = chars.length - 1 - i;
-      int j = indices[i];
-      String temp = chars[originalI];
-      chars[originalI] = chars[j];
-      chars[j] = temp;
-    }
-
-    return chars.join();
+  /// 간단한 문자 치환 복원 (XOR는 자기 자신이 역함수)
+  static String _simpleRestore(String input) {
+    return _simpleTransform(input); // XOR는 동일한 연산으로 복원
   }
 
   /// 파일에 암호화된 데이터 쓰기
@@ -128,11 +114,11 @@ class SimpleFileEncryption {
     // 1. 전치 암호화
     String encrypted = _encryptText(data);
 
-    // 2. 추가 난독화
-    String scrambled = _scrambleString(encrypted);
+    // 2. 간단한 문자 변환
+    String transformed = _simpleTransform(encrypted);
 
     // 3. Base64 인코딩
-    String base64Encoded = base64.encode(utf8.encode(scrambled));
+    String base64Encoded = base64.encode(utf8.encode(transformed));
 
     // 4. 파일에 쓰기
     File file = File(filePath);
@@ -150,12 +136,63 @@ class SimpleFileEncryption {
     String base64Data = await file.readAsString();
 
     // 2. Base64 디코딩
-    String scrambled = utf8.decode(base64.decode(base64Data));
+    String transformed = utf8.decode(base64.decode(base64Data));
 
-    // 3. 난독화 해제
-    String encrypted = _unscrambleString(scrambled);
+    // 3. 문자 변환 복원
+    String encrypted = _simpleRestore(transformed);
 
     // 4. 전치 복호화
+    return _decryptText(encrypted);
+  }
+
+  /// 디버깅용 - 단계별 테스트
+  static void debugTest(String input) {
+    print('=== 디버깅 테스트 ===');
+    print('원본: "$input"');
+
+    // 1단계: 전치 암호화
+    String encrypted = _encryptText(input);
+    print('1. 전치 암호화: "${encrypted.replaceAll('\x00', '\\0')}"');
+
+    // 2단계: 간단한 문자 변환
+    String transformed = _simpleTransform(encrypted);
+    print(
+        '2. 문자 변환: "${transformed.replaceAll('\x00', '\\0').replaceAll('\n', '\\n').replaceAll('\r', '\\r')}"');
+
+    // 3단계: Base64
+    String base64Encoded = base64.encode(utf8.encode(transformed));
+    print('3. Base64: "$base64Encoded"');
+
+    print('\n=== 복호화 과정 ===');
+
+    // 역과정 1: Base64 디코딩
+    String decodedTransformed = utf8.decode(base64.decode(base64Encoded));
+    print(
+        '1. Base64 디코딩: "${decodedTransformed.replaceAll('\x00', '\\0').replaceAll('\n', '\\n').replaceAll('\r', '\\r')}"');
+
+    // 역과정 2: 문자 변환 복원
+    String restoredEncrypted = _simpleRestore(decodedTransformed);
+    print('2. 문자 변환 복원: "${restoredEncrypted.replaceAll('\x00', '\\0')}"');
+
+    // 역과정 3: 전치 복호화
+    String finalResult = _decryptText(restoredEncrypted);
+    print('3. 전치 복호화: "$finalResult"');
+
+    print('\n원본과 일치: ${input == finalResult}');
+    print('========================\n');
+  }
+
+  /// 문자열 직접 암호화 (파일 저장 없이)
+  static String encryptString(String plainText) {
+    String encrypted = _encryptText(plainText);
+    String transformed = _simpleTransform(encrypted);
+    return base64.encode(utf8.encode(transformed));
+  }
+
+  /// 암호화된 문자열 직접 복호화
+  static String decryptString(String encryptedBase64) {
+    String transformed = utf8.decode(base64.decode(encryptedBase64));
+    String encrypted = _simpleRestore(transformed);
     return _decryptText(encrypted);
   }
 }

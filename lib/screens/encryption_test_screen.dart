@@ -139,6 +139,37 @@ class _EncryptionTestScreenState extends State<EncryptionTestScreen> {
     });
   }
 
+  // 간단한 암호화 테스트
+  void _runSimpleTest() {
+    setState(() {
+      _statusMessage = '간단한 테스트 실행 중...';
+    });
+
+    try {
+      String testInput = "Hello World!";
+
+      // 디버그 정보를 콘솔에 출력
+      SimpleFileEncryption.debugTest(testInput);
+
+      // 직접 암호화/복호화 테스트
+      String encrypted = SimpleFileEncryption.encryptString(testInput);
+      String decrypted = SimpleFileEncryption.decryptString(encrypted);
+
+      setState(() {
+        _statusMessage = '''✅ 간단한 테스트 완료!
+원본: "$testInput"
+복호화 결과: "$decrypted"
+성공: ${testInput == decrypted}
+
+자세한 디버그 정보는 콘솔을 확인하세요.''';
+      });
+    } catch (e) {
+      setState(() {
+        _statusMessage = '❌ 테스트 오류: $e';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -181,6 +212,19 @@ class _EncryptionTestScreenState extends State<EncryptionTestScreen> {
               isLoading: _isLoading,
               onWrite: _writeFile,
               onRead: _readFile,
+            ),
+
+            SizedBox(height: 8),
+
+            // 테스트 버튼
+            ElevatedButton.icon(
+              onPressed: _runSimpleTest,
+              icon: Icon(Icons.bug_report),
+              label: Text('간단한 암호화 테스트'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
             ),
 
             SizedBox(height: 16),
